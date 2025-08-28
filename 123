@@ -1,0 +1,163 @@
+<template>
+  <a-layout style="height: 100vh; padding: 20px">
+    <a-card title="组件库说明机器人" style="max-width: 800px; margin: auto">
+      <a-form layout="inline">
+        <a-form-item>
+          <a-input
+            v-model:value="componentName"
+            placeholder="输入组件名，例如 Button"
+            style="width: 300px"
+          />
+        </a-form-item>
+        <a-form-item>
+          <a-button type="primary" @click="handleAsk" :loading="loading">
+            查询
+          </a-button>
+        </a-form-item>
+      </a-form>
+
+      <a-divider />
+
+      <div v-if="answer">
+        <h3>说明结果：</h3>
+        <a-card>
+          <div class="result-container">
+            <pre>{{ answer }}</pre>
+          </div>
+        </a-card>
+      </div>
+    </a-card>
+  </a-layout>
+</template>
+
+<script lang="ts" setup>
+import { ref } from "vue";
+import { ChatOpenAI } from "@langchain/openai";
+import { PromptTemplate } from "@langchain/core/prompts";
+import { RunnableLambda, RunnableSequence } from "@langchain/core/runnables";
+import { internalDocs } from "./constant";
+import { askInternalAssistant } from "@/langchain/internalAssistant";
+
+const componentName = ref("");
+const answer = ref("");
+const loading = ref(false);
+
+const model = new ChatOpenAI({
+  modelName: "deepseek-chat",
+  temperature: 0,
+  apiKey: import.meta.env.VITE_DEEPSEEK_API_KEY,
+  configuration: {
+    baseURL: "https://api.deepseek.com/v1",
+  },
+});
+
+//小文档
+
+// const docs = JSON.stringify(myUIComponents); // 上面 JSON
+
+// const prompt = PromptTemplate.fromTemplate(`
+// 你是 MyUI 组件库说明助手。
+// 下面是组件文档：
+// {docs}
+
+// 请根据用户输入组件名，输出组件介绍、API、示例。
+// 组件名: {component}
+// `);
+
+// Prompt
+// const prompt = PromptTemplate.fromTemplate(`
+// 你是一个 Ant Design Vue 组件库说明助手。
+// 请根据输入的组件名，输出：
+// 1. 简要介绍
+// 2. API 属性列表
+
+// 组件名: {component}
+// `);
+
+const prompt = PromptTemplate.fromTemplate(`
+你是我们团队的内部知识助手。
+下面是团队文档：
+{docs}
+
+请根据用户问题提供详细回答，只输出 "points" 数组里面的内容，不要输出其他字段。把里面的字段合成一句话
+用户问题: {query}
+`);
+
+// 大文档拆分组件库
+// 拆分组件文档成 chunk
+
+// 生成向量 embedding
+
+// 存入向量数据库（如 Pinecone、Supabase、Weaviate）
+
+// 用户输入组件名 → 检索最相关文档 → 传给模型生成回答
+
+// import { OpenAIEmbeddings } from "langchain/embeddings/openai";
+// import { PineconeStore } from "langchain/vectorstores/pinecone";
+// import { RetrievalQAChain } from "langchain/chains";
+
+// // 向量检索
+// const vectorStore = await PineconeStore.fromDocuments(myUIComponents, new OpenAIEmbeddings({ apiKey: "xxxx" }));
+
+// const chain = RetrievalQAChain.fromLLM(model, vectorStore.asRetriever());
+
+// const res = await chain.call({ query: "Button" });
+// console.log(res.text);
+
+async function askInternalAssistant(query: string) {
+  console.log(internalDocs);
+
+  const docs = JSON.stringify(internalDocs, null, 2);
+  const chain = RunnableSequence.from([prompt, model]);
+  console.log(chain);
+
+  const response = await chain.invoke({ docs, query });
+  console.log(response);
+
+  return response.content.toString();
+}
+
+const handleAsk = async () => {
+  loading.value = true;
+  try {
+    answer.value = await askInternalAssistant(componentName.value);
+  } catch (err) {
+    answer.value = "查询失败：" + (e as Error).message;
+  }finally {
+    loading.value = false;
+  }
+
+
+
+  // if (!componentName.value) return;
+  // loading.value = true;
+  // answer.value = "";
+
+  // try {
+  //   const res = await chain.invoke({ component: componentName.value });
+  //   answer.value = res.content;
+  // } catch (e) {
+  //   answer.value = "查询失败：" + (e as Error).message;
+  // } finally {
+  //   loading.value = false;
+  // }
+};
+</script>
+
+<style scoped>
+.result-container {
+  max-height: 300px; /* 限制高度 */
+  overflow: auto; /* 超出时出现滚动条 */
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 12px;
+  background: #f9f9f9;
+  font-size: 14px;
+}
+
+.result-container pre {
+  margin: 0;
+  white-space: pre-wrap; /* 自动换行 */
+  word-break: break-word; /* 单词太长也能断开 */
+}
+</style>
